@@ -26,7 +26,10 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
-          npm rebuild
+          # Workaround: @tailwindcss/oxide optional native binding is mis-installed
+          # without a lockfile. Delete and reinstall so npm picks the correct platform binary.
+          rm -rf node_modules/@tailwindcss/oxide
+          npm install
 
       # Build only the Vite frontend — the Express server is not needed in the APK
       - name: Build web assets
