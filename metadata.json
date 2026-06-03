@@ -1,0 +1,6 @@
+{
+  "name": "PK Expense & Investment Tracker",
+  "description": "A comprehensive personal finance dashboard customized for Pakistan, featuring Urdu/English bank SMS translation, Filer vs Non-Filer tax calculators, local banking simulations (Meezan Bank, SadaPay, HBL, etc.), and future savings/halal investment planners.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

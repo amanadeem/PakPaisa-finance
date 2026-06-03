@@ -1,0 +1,44 @@
+name: Build Android APK
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Build Web Assets
+        run: |
+          npm install
+          npm run build
+
+      # Pulls Capacitor CLI tools to package with native Android Gradle wrappers
+      - name: Install Capacitor Core
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "RupeeWise" "id.rupeewise.app" --web-dir=dist
+          npx cap add android
+          npx cap sync
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Build Gradle APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Save APK Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: RupeeWise-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
