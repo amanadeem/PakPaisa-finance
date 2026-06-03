@@ -1,44 +1,71 @@
 name: Build Android APK
+
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
-      - name: Build Web Assets
-        run: |
-          npm install
-          npm run build
-
-      # Pulls Capacitor CLI tools to package with native Android Gradle wrappers
-      - name: Install Capacitor Core
-        run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "RupeeWise" "id.rupeewise.app" --web-dir=dist
-          npx cap add android
-          npx cap sync
-
-      - name: Set up JDK
-        uses: actions/setup-java@v3
+      # JDK must be ready before any Gradle/Android tooling runs
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Build Gradle APK
+      - name: Install dependencies
+        run: npm install
+
+      # Build only the Vite frontend — the Express server is not needed in the APK
+      - name: Build web assets
+        run: npx vite build
+
+      - name: Install Capacitor packages
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      # Create config file directly — avoids interactive prompts from `npx cap init`
+      - name: Create Capacitor config
+        run: |
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.pakpaisa.app",
+            "appName": "PakPaisa",
+            "webDir": "dist",
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
+
+      - name: Add Android platform and sync
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      # Accept SDK licenses non-interactively so Gradle doesn't abort
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Build debug APK
         run: |
           cd android
-          ./gradlew assembleDebug
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Save APK Artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: RupeeWise-Debug-APK
+          name: PakPaisa-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
