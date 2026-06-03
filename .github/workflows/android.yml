@@ -24,7 +24,12 @@ jobs:
           java-version: '17'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          # package-lock.json was generated on Windows so it locked the Windows
+          # native binding for @tailwindcss/oxide. Explicitly install the Linux one.
+          OXIDE_VERSION=$(node -e "console.log(require('./node_modules/@tailwindcss/oxide/package.json').version)")
+          npm install --no-save "@tailwindcss/oxide-linux-x64-gnu@$OXIDE_VERSION"
 
       # Build only the Vite frontend — the Express server is not needed in the APK
       - name: Build web assets
