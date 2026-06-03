@@ -24,7 +24,9 @@ jobs:
           java-version: '17'
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install
+          npm rebuild
 
       # Build only the Vite frontend — the Express server is not needed in the APK
       - name: Build web assets
