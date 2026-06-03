@@ -55,6 +55,11 @@ jobs:
       - name: Add Android platform and sync
         run: |
           npx cap add android
+          # Latest @capacitor/android references API 35 (VANILLA_ICE_CREAM).
+          # Patch variables.gradle so compileSdkVersion/targetSdkVersion match.
+          sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion = 35/' android/variables.gradle
+          sed -i 's/targetSdkVersion = [0-9]*/targetSdkVersion = 35/' android/variables.gradle
+          cat android/variables.gradle
           npx cap sync android
 
       # Gradle 8.2.1 (default in Capacitor) ships ASM 9.5 which chokes on
