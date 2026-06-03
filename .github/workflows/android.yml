@@ -62,17 +62,8 @@ jobs:
           cat android/variables.gradle
           # Force consistent Kotlin stdlib version across all transitive deps to
           # prevent checkDebugDuplicateClasses from finding conflicting class files.
-          cat >> android/app/build.gradle << 'EOF'
-
-configurations.all {
-    resolutionStrategy {
-        force "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
-        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.25"
-        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.25"
-        force "org.jetbrains.kotlin:kotlin-stdlib-common:1.9.25"
-    }
-}
-EOF
+          # (heredoc can't be used here — YAML block scalar indentation would break it)
+          node -e 'const fs=require("fs"); fs.appendFileSync("android/app/build.gradle", "\nconfigurations.all {\n    resolutionStrategy {\n        force \"org.jetbrains.kotlin:kotlin-stdlib:1.9.25\"\n        force \"org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.25\"\n        force \"org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.25\"\n        force \"org.jetbrains.kotlin:kotlin-stdlib-common:1.9.25\"\n    }\n}\n")'
           npx cap sync android
 
       # Gradle 8.2.1 (default in Capacitor) ships ASM 9.5 which chokes on
