@@ -57,6 +57,14 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      # Gradle 8.2.1 (default in Capacitor) ships ASM 9.5 which chokes on
+      # Java-21-compiled classes inside bcprov-jdk18on-1.79.jar (class version 65).
+      # Upgrade wrapper to 8.7 which bundles ASM 9.6 with Java 21 support.
+      - name: Upgrade Gradle wrapper to 8.7
+        run: |
+          sed -i 's|gradle-[0-9.]*-all.zip|gradle-8.7-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
       # Accept SDK licenses non-interactively so Gradle doesn't abort
       - name: Accept Android SDK licenses
         run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
