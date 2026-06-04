@@ -20,7 +20,11 @@ import {
   DollarSign,
   ArrowUpRight,
   HeartHandshake,
-  TrendingUp as ProfitIcon
+  TrendingUp as ProfitIcon,
+  Pencil,
+  X,
+  Link,
+  AlertCircle
 } from 'lucide-react';
 import { Transaction, AccountType, BankAccount, InvestmentScheme, SavingsGoal } from './types.ts';
 import SMSParser from './components/SMSParser.tsx';
@@ -120,6 +124,13 @@ export default function App() {
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [clearedTxIds, setClearedTxIds] = useState<string[]>(['t1', 't2', 't4', 't5']);
 
+  // Edit transaction state
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Category filter chip state
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('All');
+
   // New Transaction Form State
   const [txAmount, setTxAmount] = useState('');
   const [txDesc, setTxDesc] = useState('');
@@ -205,6 +216,42 @@ export default function App() {
       }
       return ac;
     }));
+  };
+
+  // Open edit modal with the selected transaction pre-filled
+  const handleOpenEdit = (tx: Transaction) => {
+    setEditingTx({ ...tx });
+    setIsEditModalOpen(true);
+  };
+
+  // Save edited transaction — revert old balance effect then apply new
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+    const original = transactions.find(t => t.id === editingTx.id);
+    if (!original) return;
+
+    setTransactions(prev => prev.map(t => t.id === editingTx.id ? editingTx : t));
+
+    // Revert original balance, then apply new
+    setAccounts(prev => prev.map(ac => {
+      let bal = ac.balance;
+      // Revert original transaction effect
+      if (ac.type === original.accountType) {
+        bal = original.type === 'expense' ? bal + original.amount : bal - original.amount;
+      }
+      // Apply new transaction effect (if same account, both adjustments happen sequentially)
+      if (ac.type === editingTx.accountType) {
+        bal = editingTx.type === 'expense' ? bal - editingTx.amount : bal + editingTx.amount;
+      }
+      if (ac.type === original.accountType || ac.type === editingTx.accountType) {
+        return { ...ac, balance: Math.max(0, bal) };
+      }
+      return ac;
+    }));
+
+    setIsEditModalOpen(false);
+    setEditingTx(null);
   };
 
   // Add parsed or manually typed transaction
@@ -371,9 +418,10 @@ export default function App() {
     return transactions.filter(t => {
       const matchSearch = t.description.toLowerCase().includes(txSearch.toLowerCase()) ||
                           t.category.toLowerCase().includes(txSearch.toLowerCase());
-      return matchSearch;
+      const matchCategory = activeCategoryFilter === 'All' || t.category === activeCategoryFilter;
+      return matchSearch && matchCategory;
     });
-  }, [transactions, txSearch]);
+  }, [transactions, txSearch, activeCategoryFilter]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans" id="app-root">
@@ -558,6 +606,50 @@ export default function App() {
               
               {/* Left Column: Parsers and simulator (7 cols) */}
               <div className="lg:col-span-7 space-y-6">
+
+                {/* Meezan Bank Connection Info Panel */}
+                <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-50 text-amber-700 rounded-xl flex-shrink-0">
+                      <Link className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-slate-800 text-sm">Connect Meezan Bank Account</h3>
+                        <span className="text-[9px] px-2 py-0.5 bg-amber-100 text-amber-700 font-bold rounded-full uppercase tracking-wide">Coming Soon</span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                        Pakistani banks including Meezan Bank do not yet offer a public Open Banking API. Real-time automatic account syncing is not currently available. You can track your Meezan account two ways:
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-[10px] font-bold text-emerald-800 uppercase">Option 1 — SMS Parser</span>
+                          </div>
+                          <p className="text-[10px] text-slate-600 leading-relaxed">
+                            Paste your Meezan Bank transaction SMS alerts into the parser below. It auto-extracts amount, type, and logs it to your ledger.
+                          </p>
+                        </div>
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Pencil className="h-3.5 w-3.5 text-blue-600" />
+                            <span className="text-[10px] font-bold text-blue-800 uppercase">Option 2 — Manual Entry</span>
+                          </div>
+                          <p className="text-[10px] text-slate-600 leading-relaxed">
+                            Use the "Add Transaction" drawer to manually log each spend or income from your Meezan account.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                        <AlertCircle className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-slate-500">
+                          Your Meezan Bank balance shown in the portfolio below is simulated. Update it manually to match your actual Meezan account balance.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 
                 {/* SMS parser integration */}
                 <SMSParser onAddTransaction={handleAddTransaction} />
@@ -757,6 +849,24 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Category filter chips */}
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {['All', ...categoriesList].map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setActiveCategoryFilter(cat)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          activeCategoryFilter === cat
+                            ? 'bg-emerald-800 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="space-y-2.5 max-h-[420px] overflow-y-auto custom-scrollbar">
                     {filteredTransactions.length === 0 ? (
                       <div className="text-center py-10 text-slate-400">
@@ -775,11 +885,11 @@ export default function App() {
                             }`}
                           >
                             <div className="flex items-center space-x-3 min-w-0">
-                              {/* Circular Checked Toggle Checklist */}
+                              {/* Reconcile toggle */}
                               <button
                                 type="button"
                                 id={`toggle-clear-${t.id}`}
-                                title={isCleared ? "Mark as Pending Reconciled" : "Reconcile & Clear Expense"}
+                                title={isCleared ? "Mark as Pending" : "Reconcile & Clear"}
                                 onClick={() => {
                                   setClearedTxIds(prev => 
                                     prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
@@ -825,8 +935,8 @@ export default function App() {
                               </div>
                             </div>
                             
-                            <div className="flex items-center space-x-2 flex-shrink-0">
-                              <span className={`text-xs font-bold font-sans ${
+                            <div className="flex items-center space-x-1 flex-shrink-0">
+                              <span className={`text-xs font-bold font-sans mr-1 ${
                                 isCleared 
                                   ? 'text-slate-400 font-normal' 
                                   : t.type === 'income' ? 'text-emerald-700' : 'text-slate-700'
@@ -835,8 +945,16 @@ export default function App() {
                               </span>
                               <button
                                 type="button"
+                                title="Edit transaction"
+                                onClick={() => handleOpenEdit(t)}
+                                className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
                                 id={`ledger-del-btn-${t.id}`}
-                                title="Delete logs"
+                                title="Delete transaction"
                                 onClick={() => handleDeleteTransaction(t.id, t.amount, t.type, t.accountType)}
                                 className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                               >
@@ -1643,6 +1761,117 @@ export default function App() {
                 </button>
               </div>
 
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Transaction Modal */}
+      {isEditModalOpen && editingTx && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+          onClick={() => { setIsEditModalOpen(false); setEditingTx(null); }}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-blue-900 to-blue-800 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-blue-800/55 rounded-xl">
+                  <Pencil className="h-5 w-5 text-blue-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm tracking-tight">Edit Transaction</h3>
+                  <p className="text-[10px] text-blue-200 italic">Update the details and save</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsEditModalOpen(false); setEditingTx(null); }}
+                className="p-1 px-2 text-[11px] font-extrabold uppercase bg-blue-950/40 hover:bg-blue-950/70 text-blue-200 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+              {/* Type */}
+              <div>
+                <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">TRANSACTION TYPE</label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-100/80 p-1 rounded-xl">
+                  <button type="button" onClick={() => setEditingTx({...editingTx, type: 'expense'})}
+                    className={`py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${editingTx.type === 'expense' ? 'bg-white text-rose-800 shadow-xs ring-1 ring-slate-200' : 'text-slate-500'}`}>
+                    🔻 Outflow (Expense)
+                  </button>
+                  <button type="button" onClick={() => setEditingTx({...editingTx, type: 'income'})}
+                    className={`py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${editingTx.type === 'income' ? 'bg-white text-emerald-800 shadow-xs ring-1 ring-slate-200' : 'text-slate-500'}`}>
+                    🔼 Inflow (Income)
+                  </button>
+                </div>
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1">DATE</label>
+                <input type="date" value={editingTx.date}
+                  onChange={(e) => setEditingTx({...editingTx, date: e.target.value})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-slate-800 font-medium" />
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1">PKR AMOUNT</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-3 text-[11px] font-bold text-slate-400">Rs.</span>
+                  <input type="number" required min="1"
+                    value={editingTx.amount}
+                    onChange={(e) => setEditingTx({...editingTx, amount: parseFloat(e.target.value) || 0})}
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-slate-800" />
+                </div>
+              </div>
+
+              {/* Account */}
+              <div>
+                <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1">ACCOUNT / WALLET</label>
+                <select value={editingTx.accountType}
+                  onChange={(e) => setEditingTx({...editingTx, accountType: e.target.value as AccountType})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-slate-800 font-semibold">
+                  <option value="Cash">Physical Cash Wallet</option>
+                  <option value="Meezan Bank">Meezan Bank Ltd</option>
+                  <option value="HBL">HBL Account</option>
+                  <option value="SadaPay">SadaPay Wallet</option>
+                  <option value="NayaPay">NayaPay Wallet</option>
+                  <option value="EasyPaisa">EasyPaisa</option>
+                </select>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1">CATEGORY</label>
+                <select value={editingTx.category}
+                  onChange={(e) => setEditingTx({...editingTx, category: e.target.value})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-slate-800 font-semibold">
+                  {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1">DESCRIPTION</label>
+                <input type="text" required value={editingTx.description}
+                  onChange={(e) => setEditingTx({...editingTx, description: e.target.value})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-slate-800" />
+              </div>
+
+              <div className="pt-2">
+                <button type="submit"
+                  className="w-full py-3 bg-gradient-to-r from-blue-800 to-blue-700 hover:from-blue-900 hover:to-blue-800 text-white rounded-xl text-xs font-extrabold shadow-md cursor-pointer flex items-center justify-center space-x-2 active:scale-98">
+                  <CheckCircle className="h-4 w-4 stroke-[2.5]" />
+                  <span>Save Changes</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>
