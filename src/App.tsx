@@ -1,4 +1,4 @@
-import React, { useState, useMemo, FormEvent } from 'react';
+import React, { useState, useMemo, useEffect, FormEvent } from 'react';
 import {
   Wallet,
   TrendingUp,
@@ -116,17 +116,40 @@ const INITIAL_SAVINGS_GOALS: SavingsGoal[] = [
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tax' | 'zakat' | 'investments' | 'advisor'>('dashboard');
 
-  // Core Ledger State
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [accounts, setAccounts] = useState<BankAccount[]>(INITIAL_ACCOUNTS);
-  
+  // Core Ledger State — persisted to localStorage
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try { const s = localStorage.getItem('pp_transactions'); return s ? JSON.parse(s) : INITIAL_TRANSACTIONS; } catch { return INITIAL_TRANSACTIONS; }
+  });
+  const [accounts, setAccounts] = useState<BankAccount[]>(() => {
+    try { const s = localStorage.getItem('pp_accounts'); return s ? JSON.parse(s) : INITIAL_ACCOUNTS; } catch { return INITIAL_ACCOUNTS; }
+  });
+
+  // Persist state changes
+  useEffect(() => { try { localStorage.setItem('pp_transactions', JSON.stringify(transactions)); } catch {} }, [transactions]);
+  useEffect(() => { try { localStorage.setItem('pp_accounts', JSON.stringify(accounts)); } catch {} }, [accounts]);
+
   // Mobile Modal state & cleared checklist state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
-  const [clearedTxIds, setClearedTxIds] = useState<string[]>(['t1', 't2', 't4', 't5']);
+  const [clearedTxIds, setClearedTxIds] = useState<string[]>(() => {
+    try { const s = localStorage.getItem('pp_cleared'); return s ? JSON.parse(s) : ['t1', 't2', 't4', 't5']; } catch { return ['t1', 't2', 't4', 't5']; }
+  });
+  useEffect(() => { try { localStorage.setItem('pp_cleared', JSON.stringify(clearedTxIds)); } catch {} }, [clearedTxIds]);
 
   // Edit transaction state
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Account management state
+  const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccType, setNewAccType] = useState<AccountType>('Meezan Bank');
+  const [newAccNumber, setNewAccNumber] = useState('');
+  const [newAccBalance, setNewAccBalance] = useState('');
+
+  // SMS tools collapsed state
+  const [isSmsToolsOpen, setIsSmsToolsOpen] = useState(false);
 
   // Category filter chip state
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('All');
@@ -252,6 +275,39 @@ export default function App() {
 
     setIsEditModalOpen(false);
     setEditingTx(null);
+  };
+
+  // Account CRUD
+  const handleOpenEditAccount = (ac: BankAccount) => {
+    setEditingAccount({ ...ac });
+    setIsAccountModalOpen(true);
+  };
+
+  const handleSaveAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+    setAccounts(prev => prev.map(a => a.id === editingAccount.id ? editingAccount : a));
+    setIsAccountModalOpen(false);
+    setEditingAccount(null);
+  };
+
+  const handleDeleteAccount = (id: string) => {
+    setAccounts(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleAddAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAccName.trim()) return;
+    const newAc: BankAccount = {
+      id: `ac-${Date.now()}`,
+      name: newAccName.trim(),
+      type: newAccType,
+      accountNumber: newAccNumber.trim() || '—',
+      balance: parseFloat(newAccBalance) || 0,
+    };
+    setAccounts(prev => [...prev, newAc]);
+    setNewAccName(''); setNewAccType('Meezan Bank'); setNewAccNumber(''); setNewAccBalance('');
+    setIsAddAccountModalOpen(false);
   };
 
   // Add parsed or manually typed transaction
@@ -557,419 +613,258 @@ export default function App() {
         
         {/* TAB 1: LEDGER AND BANK SMS INTEGRATION SIMULATION */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6" id="tab-dashboard-panel">
+          <div className="space-y-5" id="tab-dashboard-panel">
             
-            {/* Quick Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex items-center justify-between" id="metric-pkr-balance">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Simulated Liquid Assets</span>
-                  <span className="text-2xl font-bold text-slate-900 tracking-tight">
-                    Rs. {currentNetWorth.toLocaleString()}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block font-medium">Cumulative across 5 PK bank-wallets</span>
-                </div>
-                <div className="p-3.5 bg-emerald-50 text-emerald-700 rounded-xl">
-                  <Wallet className="h-6 w-6" />
+            {/* ── SECTION 1: Summary Cards ── */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl shrink-0"><Wallet className="h-5 w-5" /></div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Total Balance</span>
+                  <span className="text-lg font-bold text-slate-900 leading-tight">Rs. {currentNetWorth.toLocaleString()}</span>
                 </div>
               </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex items-center justify-between" id="metric-pkr-income">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Monthly Total Inflow</span>
-                  <span className="text-2xl font-bold text-emerald-700 tracking-tight">
-                    Rs. {totalIncome.toLocaleString()}
-                  </span>
-                  <span className="text-[10px] text-emerald-600/95 font-medium block">Freelance earnings & salary additions</span>
-                </div>
-                <div className="p-3.5 bg-emerald-50 text-emerald-700 rounded-xl">
-                  <TrendingUp className="h-6 w-6" />
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl shrink-0"><TrendingUp className="h-5 w-5" /></div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Total Income</span>
+                  <span className="text-lg font-bold text-emerald-700 leading-tight">Rs. {totalIncome.toLocaleString()}</span>
                 </div>
               </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex items-center justify-between" id="metric-pkr-expense">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Monthly Spent Ledger</span>
-                  <span className="text-2xl font-bold text-rose-700 tracking-tight">
-                    Rs. {totalExpense.toLocaleString()}
-                  </span>
-                  <span className="text-[10px] text-rose-500 font-medium block">Utility bills, groceries, tea-pani</span>
-                </div>
-                <div className="p-3.5 bg-rose-50 text-rose-700 rounded-xl">
-                  <TrendingDown className="h-6 w-6" />
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
+                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl shrink-0"><TrendingDown className="h-5 w-5" /></div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Total Expenses</span>
+                  <span className="text-lg font-bold text-rose-600 leading-tight">Rs. {totalExpense.toLocaleString()}</span>
                 </div>
               </div>
             </div>
 
-            {/* Split Screen Panel for SMS Simulator and parser */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
-              {/* Left Column: Parsers and simulator (7 cols) */}
-              <div className="lg:col-span-7 space-y-6">
+            {/* ── SECTION 2: Financial Ledger (full width, primary focus) ── */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="font-bold text-slate-900 text-base">Financial Ledger</h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{transactions.length} transactions logged</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTxModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                >
+                  <Plus className="h-3.5 w-3.5 stroke-[3]" />
+                  Add Transaction
+                </button>
+              </div>
 
-                {/* Meezan Bank Connection Info Panel */}
-                <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-amber-50 text-amber-700 rounded-xl flex-shrink-0">
-                      <Link className="h-5 w-5" />
+              {/* Search + Filter */}
+              <div className="px-5 pt-4 pb-3 space-y-3 border-b border-slate-50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={txSearch}
+                    onChange={(e) => setTxSearch(e.target.value)}
+                    placeholder="Search by description or category…"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-slate-800"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {['All', ...categoriesList].map(cat => (
+                    <button key={cat} type="button" onClick={() => setActiveCategoryFilter(cat)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        activeCategoryFilter === cat ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Transaction rows */}
+              <div className="divide-y divide-slate-50">
+                {filteredTransactions.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    <Wallet className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">No transactions match your filter</p>
+                  </div>
+                ) : (
+                  filteredTransactions.map((t) => {
+                    const isCleared = clearedTxIds.includes(t.id);
+                    return (
+                      <div key={t.id}
+                        className={`flex items-center gap-3 px-5 py-3.5 transition-colors ${isCleared ? 'opacity-60 bg-slate-50/40' : 'hover:bg-slate-50/60'}`}
+                      >
+                        {/* Reconcile toggle */}
+                        <button type="button"
+                          title={isCleared ? 'Mark as pending' : 'Mark as cleared'}
+                          onClick={() => setClearedTxIds(prev => prev.includes(t.id) ? prev.filter(i => i !== t.id) : [...prev, t.id])}
+                          className={`h-5 w-5 rounded-full flex items-center justify-center border transition-all cursor-pointer shrink-0 ${
+                            isCleared ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300 hover:border-emerald-500 bg-white'
+                          }`}
+                        >
+                          {isCleared && <svg className="h-3 w-3 text-white stroke-[3.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                        </button>
+
+                        {/* Type indicator */}
+                        <div className={`w-1.5 h-8 rounded-full shrink-0 ${t.type === 'income' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-xs font-semibold block truncate ${isCleared ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                            {t.description}
+                          </span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase">{t.category}</span>
+                            <span className="text-[9px] text-slate-400">{t.date}</span>
+                            <span className="text-[9px] text-slate-400">{t.accountType === 'Cash' ? '🪙' : '🏦'} {t.accountType}</span>
+                          </div>
+                        </div>
+
+                        {/* Amount */}
+                        <span className={`text-sm font-bold shrink-0 tabular-nums ${
+                          isCleared ? 'text-slate-400' : t.type === 'income' ? 'text-emerald-700' : 'text-slate-800'
+                        }`}>
+                          {t.type === 'income' ? '+' : '−'} Rs.&nbsp;{t.amount.toLocaleString()}
+                        </span>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button type="button" title="Edit" onClick={() => handleOpenEdit(t)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button type="button" title="Delete" onClick={() => handleDeleteTransaction(t.id, t.amount, t.type, t.accountType)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* ── SECTION 3: Bank Accounts ── */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="font-bold text-slate-900 text-base">Accounts & Wallets</h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Tap ✏️ to edit balance or account details</p>
+                </div>
+                <button type="button" onClick={() => setIsAddAccountModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm">
+                  <Plus className="h-3.5 w-3.5 stroke-[3]" />
+                  Add Account
+                </button>
+              </div>
+
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {accounts.map(ac => (
+                  <div key={ac.id} className="flex items-center justify-between bg-slate-50 border border-slate-100 p-3.5 rounded-xl hover:border-slate-200 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xl shrink-0">{ac.type === 'Cash' ? '🪙' : '🏦'}</span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-800 block truncate">{ac.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono block truncate">{ac.accountNumber}</span>
+                        <span className="text-sm font-bold text-slate-900 block mt-0.5">Rs. {ac.balance.toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold text-slate-800 text-sm">Connect Meezan Bank Account</h3>
-                        <span className="text-[9px] px-2 py-0.5 bg-amber-100 text-amber-700 font-bold rounded-full uppercase tracking-wide">Coming Soon</span>
-                      </div>
-                      <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                        Pakistani banks including Meezan Bank do not yet offer a public Open Banking API. Real-time automatic account syncing is not currently available. You can track your Meezan account two ways:
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                            <span className="text-[10px] font-bold text-emerald-800 uppercase">Option 1 — SMS Parser</span>
-                          </div>
-                          <p className="text-[10px] text-slate-600 leading-relaxed">
-                            Paste your Meezan Bank transaction SMS alerts into the parser below. It auto-extracts amount, type, and logs it to your ledger.
-                          </p>
-                        </div>
-                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Pencil className="h-3.5 w-3.5 text-blue-600" />
-                            <span className="text-[10px] font-bold text-blue-800 uppercase">Option 2 — Manual Entry</span>
-                          </div>
-                          <p className="text-[10px] text-slate-600 leading-relaxed">
-                            Use the "Add Transaction" drawer to manually log each spend or income from your Meezan account.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-                        <AlertCircle className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-                        <p className="text-[10px] text-slate-500">
-                          Your Meezan Bank balance shown in the portfolio below is simulated. Update it manually to match your actual Meezan account balance.
-                        </p>
-                      </div>
+                    <div className="flex flex-col gap-1 shrink-0 ml-2">
+                      <button type="button" title="Edit account" onClick={() => handleOpenEditAccount(ac)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" title="Delete account" onClick={() => handleDeleteAccount(ac.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
-                </div>
-                
-                {/* SMS parser integration */}
-                <SMSParser onAddTransaction={handleAddTransaction} />
+                ))}
+              </div>
+            </div>
 
-                {/* Simulated SMS Bank Dispatcher (The simulator mock) */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
-                        <Building className="h-5 w-5" />
+            {/* ── SECTION 4: Meezan Bank Info (compact) ── */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-start gap-3">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs font-bold text-amber-800 block mb-1">Connecting Meezan Bank / Other Banks</span>
+                <p className="text-[10px] text-amber-700 leading-relaxed">
+                  Pakistani banks don't offer a public Open Banking API yet. To track your Meezan account: (1) paste transaction SMS alerts into the SMS Parser below, or (2) use Add Transaction to log manually. Edit the Meezan account balance above to match your actual balance.
+                </p>
+              </div>
+            </div>
+
+            {/* ── SECTION 5: SMS Tools (collapsible) ── */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <button type="button" onClick={() => setIsSmsToolsOpen(p => !p)}
+                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition-colors cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-slate-100 rounded-lg"><Building className="h-4 w-4 text-slate-600" /></div>
+                  <div>
+                    <span className="text-sm font-bold text-slate-800">SMS Parser & Bank Simulator</span>
+                    <span className="text-[10px] text-slate-400 block">Paste bank SMS to auto-log transactions</span>
+                  </div>
+                </div>
+                <span className={`text-slate-400 transition-transform duration-200 ${isSmsToolsOpen ? 'rotate-180' : ''}`}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                </span>
+              </button>
+
+              {isSmsToolsOpen && (
+                <div className="border-t border-slate-100 p-5 space-y-6">
+                  <SMSParser onAddTransaction={handleAddTransaction} />
+
+                  {/* SMS Mock Simulator */}
+                  <div>
+                    <h3 className="font-semibold text-slate-700 text-sm mb-3">Bank SMS Mock Simulator</h3>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Bank</label>
+                        <select value={activeSimulationBank} onChange={(e) => setActiveSimulationBank(e.target.value as AccountType)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                          <option value="Meezan Bank">Meezan Bank Ltd</option>
+                          <option value="SadaPay">SadaPay</option>
+                          <option value="EasyPaisa">EasyPaisa</option>
+                          <option value="HBL">HBL</option>
+                        </select>
                       </div>
                       <div>
-                        <h3 className="font-semibold text-slate-800 text-base">Pakistani Bank Transaction Mock Simulator</h3>
-                        <p className="text-xs text-slate-500">Draft & send custom SMS texts to inspect extraction logic</p>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Amount (PKR)</label>
+                        <input type="number" value={simulationAmount} onChange={(e) => setSimulationAmount(e.target.value)} placeholder="e.g. 1500"
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Type</label>
+                        <div className="flex bg-slate-50 p-1 rounded-lg border border-slate-200">
+                          <button type="button" onClick={() => setSimulationType('debit')}
+                            className={`flex-1 py-1 rounded text-xs font-bold cursor-pointer ${simulationType === 'debit' ? 'bg-rose-500 text-white' : 'text-slate-600'}`}>Debit</button>
+                          <button type="button" onClick={() => setSimulationType('credit')}
+                            className={`flex-1 py-1 rounded text-xs font-bold cursor-pointer ${simulationType === 'credit' ? 'bg-emerald-600 text-white' : 'text-slate-600'}`}>Credit</button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Merchant</label>
+                        <input type="text" value={simulationMerchant} onChange={(e) => setSimulationMerchant(e.target.value)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
                       </div>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">SELECT SENDER BANK</label>
-                      <select
-                        id="sim-bank-select"
-                        value={activeSimulationBank}
-                        onChange={(e) => setActiveSimulationBank(e.target.value as AccountType)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none text-slate-850"
-                      >
-                        <option value="Meezan Bank">Meezan Bank Ltd (POS / Islamic Info)</option>
-                        <option value="SadaPay">SadaPay Wallet Info</option>
-                        <option value="EasyPaisa">EasyPaisa Mobile Wallet</option>
-                        <option value="HBL">Habib Bank Ltd (HBL Mobile)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">TRANSACTION VALUE (PKR)</label>
-                      <input
-                        id="sim-amount-input"
-                        type="number"
-                        value={simulationAmount}
-                        onChange={(e) => setSimulationAmount(e.target.value)}
-                        placeholder="e.g. 1500"
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">TYPE OF MOVEMENT</label>
-                      <div className="flex bg-slate-50 p-1 rounded-lg border border-slate-200">
-                        <button
-                          type="button"
-                          id="btn-sim-debit"
-                          onClick={() => setSimulationType('debit')}
-                          className={`flex-1 text-center py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                            simulationType === 'debit' ? 'bg-red-500 text-white shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          Debit (Spent)
-                        </button>
-                        <button
-                          type="button"
-                          id="btn-sim-credit"
-                          onClick={() => setSimulationType('credit')}
-                          className={`flex-1 text-center py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                            simulationType === 'credit' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          Credit (Received)
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">PARTICIPANT MERCHANT</label>
-                      <input
-                        id="sim-merchant-input"
-                        type="text"
-                        value={simulationMerchant}
-                        onChange={(e) => setSimulationMerchant(e.target.value)}
-                        placeholder="e.g. Foodpanda, KE Web Payment, KHALID MEHMOOD"
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      id="generate-simulated-sms-btn"
-                      onClick={handleGenerateSimulatedSMS}
-                      className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
-                    >
-                      Generate Mock SMS SMS text below
+                    <button type="button" onClick={handleGenerateSimulatedSMS}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer">
+                      Generate Mock SMS
                     </button>
-
                     {generatedSMSText && (
-                      <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
-                        <span className="text-[10px] font-bold text-indigo-700 block mb-1">SIMULATED SMS FROM SENDER:</span>
-                        <p className="text-xs text-slate-800 font-mono select-all bg-white p-2 border border-slate-100 rounded-lg">
-                          {generatedSMSText}
-                        </p>
-                        <button
-                          type="button"
-                          id="trigger-sms-parse-btn"
-                          onClick={() => {
-                            // Populate the parser input of SMSParser.tsx
-                            const textareaInput = document.getElementById('sms-textarea-input') as HTMLTextAreaElement;
-                            if (textareaInput) {
-                              textareaInput.value = generatedSMSText;
-                              // Simulate typing event for react
-                              const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-                              nativeTextAreaValueSetter?.call(textareaInput, generatedSMSText);
-                              textareaInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
-                            // Trigger the parse with high priority scroll to viewport
-                            document.getElementById('sms-textarea-input')?.scrollIntoView({ behavior: 'smooth' });
-                          }}
-                          className="mt-2 text-indigo-700 text-xs font-bold underline hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
-                        >
-                          Copy and send instantly to PK SMS Parser ↑
-                        </button>
+                      <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                        <span className="text-[10px] font-bold text-indigo-700 block mb-1">SIMULATED SMS:</span>
+                        <p className="text-xs text-slate-800 font-mono select-all bg-white p-2 border border-slate-100 rounded-lg">{generatedSMSText}</p>
                       </div>
                     )}
                   </div>
                 </div>
-
-                {/* Physical/Wallet balances list */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                  <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                    <h3 className="font-semibold text-slate-800 text-sm">Liquid Balance Portfolio (Banks & Digital Wallets)</h3>
-                    <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-full font-serif">PKR Accounts</span>
-                  </div>
-                  <div className="space-y-3">
-                    {accounts.map(ac => (
-                      <div key={ac.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-emerald-50 text-emerald-805 rounded-xl text-center min-w-[40px] font-extrabold text-[10px]">
-                            {ac.type === 'Cash' ? '🪙' : '🏦'}
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 block">{ac.name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono font-medium">{ac.accountNumber}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-bold text-xs text-slate-800 font-sans block">Rs. {ac.balance.toLocaleString()}</span>
-                          <span className="text-[9px] text-slate-500 italic">No withholding liability</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Right Column: Ledger Entry and Transaction List (5 cols) */}
-              <div className="lg:col-span-5 space-y-6">
-                
-                {/* Manual Transaction Input Trigger Card */}
-                <div className="bg-gradient-to-br from-slate-50 to-emerald-50/20 rounded-2xl border border-slate-150/75 shadow-xs p-6 relative overflow-hidden flex flex-col justify-between h-[180px]">
-                  <div className="absolute right-0 bottom-0 opacity-10 translate-x-3 translate-y-3 pointer-events-none">
-                    <Plus className="h-32 w-32 text-emerald-950 font-extrabold" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded-full inline-block mb-2 font-mono">
-                      Handy Ledger Tool
-                    </span>
-                    <h3 className="font-bold text-slate-800 text-sm">Add Transaction Manually</h3>
-                    <p className="text-xs text-slate-500 mt-1 max-w-[280px]">
-                      Easily log physical cash spendings, chai-pani receipts, or daily wages.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsTxModalOpen(true)}
-                    className="w-full py-2.5 bg-gradient-to-r from-emerald-800 to-teal-900 hover:opacity-95 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center space-x-2 cursor-pointer mt-3 active:scale-98"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Launch Transaction Drawer</span>
-                  </button>
-                </div>
-
-                {/* Ledger Listing */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-                    <h3 className="font-semibold text-slate-800 text-sm">Financial Ledger</h3>
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                      <input
-                        id="ledger-search-input"
-                        type="text"
-                        value={txSearch}
-                        onChange={(e) => setTxSearch(e.target.value)}
-                        placeholder="Search items, Category..."
-                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none w-full text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Category filter chips */}
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                    {['All', ...categoriesList].map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setActiveCategoryFilter(cat)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap ${
-                          activeCategoryFilter === cat
-                            ? 'bg-emerald-800 text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2.5 max-h-[420px] overflow-y-auto custom-scrollbar">
-                    {filteredTransactions.length === 0 ? (
-                      <div className="text-center py-10 text-slate-400">
-                        <p className="text-xs">No ledger history matches filter criteria</p>
-                      </div>
-                    ) : (
-                      filteredTransactions.map((t) => {
-                        const isCleared = clearedTxIds.includes(t.id);
-                        return (
-                          <div 
-                            key={t.id} 
-                            className={`p-3 rounded-xl border flex items-center justify-between transition-all duration-200 ${
-                              isCleared 
-                                ? 'bg-slate-50/65 border-slate-200/50 opacity-75' 
-                                : 'bg-white border-slate-200 shadow-xs hover:border-emerald-300'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-3 min-w-0">
-                              {/* Reconcile toggle */}
-                              <button
-                                type="button"
-                                id={`toggle-clear-${t.id}`}
-                                title={isCleared ? "Mark as Pending" : "Reconcile & Clear"}
-                                onClick={() => {
-                                  setClearedTxIds(prev => 
-                                    prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
-                                  );
-                                }}
-                                className={`h-5 w-5 rounded-full flex items-center justify-center border transition-all cursor-pointer flex-shrink-0 ${
-                                  isCleared 
-                                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
-                                    : 'border-slate-300 hover:border-emerald-600 hover:scale-105 active:scale-95 bg-slate-50'
-                                }`}
-                              >
-                                <svg className={`h-3 w-3 text-white stroke-[3.5] ${isCleared ? 'block' : 'hidden'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                              </button>
-
-                              <div className="min-w-0">
-                                <span className={`text-xs font-semibold block truncate ${
-                                  isCleared ? 'text-slate-400 line-through decoration-slate-300 decoration-1 font-normal' : 'text-slate-800'
-                                }`}>
-                                  {t.description}
-                                </span>
-                                <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400 mt-0.5">
-                                  <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${
-                                    isCleared 
-                                      ? 'bg-slate-200/50 text-slate-500' 
-                                      : 'bg-emerald-50 text-emerald-800'
-                                  }`}>
-                                    {t.category}
-                                  </span>
-                                  <span>•</span>
-                                  <span>{t.date}</span>
-                                  <span>•</span>
-                                  <span className="font-bold text-slate-500 font-mono tracking-tight uppercase">
-                                    {t.accountType === 'Cash' ? '🪙 Cash' : `🏦 ${t.accountType}`}
-                                  </span>
-                                  {isCleared && (
-                                    <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded uppercase tracking-wider">
-                                      Cleared
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1 flex-shrink-0">
-                              <span className={`text-xs font-bold font-sans mr-1 ${
-                                isCleared 
-                                  ? 'text-slate-400 font-normal' 
-                                  : t.type === 'income' ? 'text-emerald-700' : 'text-slate-700'
-                              }`}>
-                                {t.type === 'income' ? '+' : '-'} Rs. {t.amount.toLocaleString()}
-                              </span>
-                              <button
-                                type="button"
-                                title="Edit transaction"
-                                onClick={() => handleOpenEdit(t)}
-                                className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                id={`ledger-del-btn-${t.id}`}
-                                title="Delete transaction"
-                                onClick={() => handleDeleteTransaction(t.id, t.amount, t.type, t.accountType)}
-                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
+              )}
             </div>
 
           </div>
@@ -1766,7 +1661,120 @@ export default function App() {
         </div>
       )}
 
-      {/* Edit Transaction Modal */}
+      {/* Edit Account Modal */}
+      {isAccountModalOpen && editingAccount && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+          onClick={() => { setIsAccountModalOpen(false); setEditingAccount(null); }}>
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-5 bg-gradient-to-r from-slate-800 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-700 rounded-xl"><Pencil className="h-4 w-4 text-slate-300" /></div>
+                <span className="font-bold text-sm">Edit Account</span>
+              </div>
+              <button type="button" onClick={() => { setIsAccountModalOpen(false); setEditingAccount(null); }}
+                className="p-1 text-slate-400 hover:text-white cursor-pointer"><X className="h-4 w-4" /></button>
+            </div>
+            <form onSubmit={handleSaveAccount} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Account Name</label>
+                <input type="text" required value={editingAccount.name}
+                  onChange={e => setEditingAccount({...editingAccount, name: e.target.value})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-slate-500/20 focus:outline-none text-slate-800 font-medium" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Account Type</label>
+                <select value={editingAccount.type} onChange={e => setEditingAccount({...editingAccount, type: e.target.value as AccountType})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-slate-500/20 focus:outline-none text-slate-800 font-semibold">
+                  <option value="Cash">Cash</option>
+                  <option value="Meezan Bank">Meezan Bank</option>
+                  <option value="HBL">HBL</option>
+                  <option value="SadaPay">SadaPay</option>
+                  <option value="NayaPay">NayaPay</option>
+                  <option value="Bank Alfalah">Bank Alfalah</option>
+                  <option value="EasyPaisa">EasyPaisa</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Account / IBAN Number</label>
+                <input type="text" value={editingAccount.accountNumber}
+                  onChange={e => setEditingAccount({...editingAccount, accountNumber: e.target.value})}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-slate-500/20 focus:outline-none text-slate-800 font-mono" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Current Balance (PKR)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-3 text-[11px] font-bold text-slate-400">Rs.</span>
+                  <input type="number" required min="0" value={editingAccount.balance}
+                    onChange={e => setEditingAccount({...editingAccount, balance: parseFloat(e.target.value) || 0})}
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 focus:outline-none text-slate-800" />
+                </div>
+              </div>
+              <button type="submit"
+                className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2">
+                <CheckCircle className="h-4 w-4" /> Save Changes
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Account Modal */}
+      {isAddAccountModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+          onClick={() => setIsAddAccountModalOpen(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-5 bg-gradient-to-r from-emerald-900 to-teal-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-800 rounded-xl"><Plus className="h-4 w-4 text-emerald-300" /></div>
+                <span className="font-bold text-sm">Add New Account</span>
+              </div>
+              <button type="button" onClick={() => setIsAddAccountModalOpen(false)}
+                className="p-1 text-emerald-400 hover:text-white cursor-pointer"><X className="h-4 w-4" /></button>
+            </div>
+            <form onSubmit={handleAddAccount} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Account Name</label>
+                <input type="text" required value={newAccName} onChange={e => setNewAccName(e.target.value)}
+                  placeholder="e.g. Meezan Salary Account"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-slate-800 font-medium" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Account Type</label>
+                <select value={newAccType} onChange={e => setNewAccType(e.target.value as AccountType)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-slate-800 font-semibold">
+                  <option value="Cash">Cash</option>
+                  <option value="Meezan Bank">Meezan Bank</option>
+                  <option value="HBL">HBL</option>
+                  <option value="SadaPay">SadaPay</option>
+                  <option value="NayaPay">NayaPay</option>
+                  <option value="Bank Alfalah">Bank Alfalah</option>
+                  <option value="EasyPaisa">EasyPaisa</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Account / IBAN / Phone Number</label>
+                <input type="text" value={newAccNumber} onChange={e => setNewAccNumber(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-slate-800 font-mono" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Opening Balance (PKR)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-3 text-[11px] font-bold text-slate-400">Rs.</span>
+                  <input type="number" min="0" value={newAccBalance} onChange={e => setNewAccBalance(e.target.value)}
+                    placeholder="0"
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-slate-800" />
+                </div>
+              </div>
+              <button type="submit"
+                className="w-full py-3 bg-gradient-to-r from-emerald-800 to-teal-800 hover:opacity-95 text-white rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4 stroke-[3]" /> Add Account
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {isEditModalOpen && editingTx && (
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
